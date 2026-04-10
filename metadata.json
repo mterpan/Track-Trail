@@ -1,0 +1,5 @@
+{
+  "name": "Track&Trail",
+  "description": "A job application tracker that allows you to manage applications, status history, attachments, and inbound contacts. Supports ZIP export and import.",
+  "requestFramePermissions": []
+}

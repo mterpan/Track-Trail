@@ -1,0 +1,248 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: applications
+    // Document ID: {applicationId}
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required, immutable)
+    //   - company: string (required, max 100)
+    //   - title: string (required, max 100)
+    //   - url: string (optional, max 500)
+    //   - dateApplied: string (required, max 20)
+    //   - status: string (required, enum)
+    //   - notes: string (optional, max 5000)
+    //   - createdAt: number (required, immutable)
+    //   - updatedAt: number (required)
+    //
+    // Collection: status_events
+    // Document ID: {eventId}
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required, immutable)
+    //   - applicationId: string (required)
+    //   - status: string (required, enum)
+    //   - date: string (required, max 20)
+    //   - notes: string (optional, max 5000)
+    //   - createdAt: number (required, immutable)
+    //
+    // Collection: contacts
+    // Document ID: {contactId}
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required, immutable)
+    //   - name: string (required, max 100)
+    //   - company: string (required, max 100)
+    //   - role: string (optional, max 100)
+    //   - email: string (optional, max 100)
+    //   - phone: string (optional, max 50)
+    //   - dateContacted: string (required, max 20)
+    //   - notes: string (optional, max 5000)
+    //   - createdAt: number (required, immutable)
+    //
+    // Collection: attachments
+    // Document ID: {attachmentId}
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required, immutable)
+    //   - applicationId: string (required)
+    //   - name: string (required, max 200)
+    //   - type: string (required, max 100)
+    //   - size: number (required)
+    //   - data: string (optional, max 1048576)
+    //   - hasChunks: bool (optional)
+    //   - chunkCount: number (optional)
+    //   - createdAt: number (required, immutable)
+    //
+    // Collection: attachment_chunks
+    // Document ID: {chunkId}
+    // Fields:
+    //   - id: string (required)
+    //   - userId: string (required, immutable)
+    //   - attachmentId: string (required)
+    //   - chunkIndex: number (required)
+    //   - data: string (required, max 1048576)
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+    
+    function uidUnchanged() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid;
+    }
+    
+    function uidNotModified() {
+      return !('userId' in request.resource.data) || request.resource.data.userId == resource.data.userId;
+    }
+    
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    
+    function validStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+    
+    function isValidOptionalString(field, minLen, maxLen) {
+      return !(field in request.resource.data) ||
+             (request.resource.data[field] is string &&
+              request.resource.data[field].size() >= minLen &&
+              request.resource.data[field].size() <= maxLen);
+    }
+    
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    
+    function isValidApplication(data) {
+      let validStatuses = ['Draft', 'Applied', 'Interviewing', 'Offer', 'Rejected', 'Accepted', 'Withdrawn'];
+      return hasRequiredFields(['id', 'userId', 'company', 'title', 'dateApplied', 'status', 'createdAt', 'updatedAt']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.company is string && data.company.size() > 0 && data.company.size() <= 100 &&
+             data.title is string && data.title.size() > 0 && data.title.size() <= 100 &&
+             isValidOptionalString('url', 0, 500) &&
+             data.dateApplied is string && data.dateApplied.size() > 0 && data.dateApplied.size() <= 20 &&
+             data.status in validStatuses &&
+             isValidOptionalString('notes', 0, 5000) &&
+             data.createdAt is number &&
+             data.updatedAt is number;
+    }
+    
+    function isValidStatusEvent(data) {
+      let validStatuses = ['Draft', 'Applied', 'Interviewing', 'Offer', 'Rejected', 'Accepted', 'Withdrawn'];
+      return hasRequiredFields(['id', 'userId', 'applicationId', 'status', 'date', 'createdAt']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.applicationId is string && data.applicationId.size() > 0 && data.applicationId.size() < 100 &&
+             data.status in validStatuses &&
+             data.date is string && data.date.size() > 0 && data.date.size() <= 20 &&
+             isValidOptionalString('notes', 0, 5000) &&
+             data.createdAt is number;
+    }
+    
+    function isValidContact(data) {
+      return hasRequiredFields(['id', 'userId', 'name', 'company', 'dateContacted', 'createdAt']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.company is string && data.company.size() > 0 && data.company.size() <= 100 &&
+             isValidOptionalString('role', 0, 100) &&
+             isValidOptionalString('email', 0, 100) &&
+             isValidOptionalString('phone', 0, 50) &&
+             data.dateContacted is string && data.dateContacted.size() > 0 && data.dateContacted.size() <= 20 &&
+             isValidOptionalString('notes', 0, 5000) &&
+             data.createdAt is number;
+    }
+
+    function isValidAttachment(data) {
+      return hasRequiredFields(['id', 'userId', 'applicationId', 'name', 'type', 'size', 'createdAt']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.applicationId is string && data.applicationId.size() > 0 && data.applicationId.size() < 100 &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.type is string && data.type.size() > 0 && data.type.size() <= 100 &&
+             data.size is number && data.size > 0 &&
+             isValidOptionalString('data', 0, 1048576) &&
+             (!('hasChunks' in data) || data.hasChunks is bool) &&
+             (!('chunkCount' in data) || data.chunkCount is number) &&
+             data.createdAt is number;
+    }
+
+    function isValidAttachmentChunk(data) {
+      return hasRequiredFields(['id', 'userId', 'attachmentId', 'chunkIndex', 'data']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.userId is string && data.userId.size() > 0 && data.userId.size() < 100 &&
+             data.attachmentId is string && data.attachmentId.size() > 0 && data.attachmentId.size() < 100 &&
+             data.chunkIndex is number && data.chunkIndex >= 0 &&
+             data.data is string && data.data.size() > 0 && data.data.size() <= 1048576;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /applications/{applicationId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && 
+                    isValidApplication(request.resource.data) && 
+                    uidUnchanged();
+      allow update: if isDocOwner() && 
+                    isValidApplication(request.resource.data) && 
+                    uidNotModified() &&
+                    areImmutableFieldsUnchanged(['id', 'userId', 'createdAt']);
+      allow delete: if isDocOwner();
+    }
+    
+    match /status_events/{eventId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && 
+                    isValidStatusEvent(request.resource.data) && 
+                    uidUnchanged();
+      allow update: if isDocOwner() && 
+                    isValidStatusEvent(request.resource.data) && 
+                    uidNotModified() &&
+                    areImmutableFieldsUnchanged(['id', 'userId', 'applicationId', 'createdAt']);
+      allow delete: if isDocOwner();
+    }
+    
+    match /contacts/{contactId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && 
+                    isValidContact(request.resource.data) && 
+                    uidUnchanged();
+      allow update: if isDocOwner() && 
+                    isValidContact(request.resource.data) && 
+                    uidNotModified() &&
+                    areImmutableFieldsUnchanged(['id', 'userId', 'createdAt']);
+      allow delete: if isDocOwner();
+    }
+
+    match /attachments/{attachmentId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && 
+                    isValidAttachment(request.resource.data) && 
+                    uidUnchanged();
+      allow update: if isDocOwner() && 
+                    isValidAttachment(request.resource.data) && 
+                    uidNotModified() &&
+                    areImmutableFieldsUnchanged(['id', 'userId', 'applicationId', 'createdAt']);
+      allow delete: if isDocOwner();
+    }
+
+    match /attachment_chunks/{chunkId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && 
+                    isValidAttachmentChunk(request.resource.data) && 
+                    uidUnchanged();
+      allow update: if isDocOwner() && 
+                    isValidAttachmentChunk(request.resource.data) && 
+                    uidNotModified() &&
+                    areImmutableFieldsUnchanged(['id', 'userId', 'attachmentId', 'chunkIndex', 'createdAt']);
+      allow delete: if isDocOwner();
+    }
+  }
+}

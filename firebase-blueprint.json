@@ -1,0 +1,108 @@
+{
+  "entities": {
+    "Application": {
+      "title": "Application",
+      "description": "A job application tracked by the user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "company": { "type": "string" },
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "dateApplied": { "type": "string" },
+        "status": { "type": "string", "enum": ["Draft", "Applied", "Interviewing", "Offer", "Rejected", "Accepted", "Withdrawn"] },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "company", "title", "dateApplied", "status", "createdAt", "updatedAt"]
+    },
+    "StatusEvent": {
+      "title": "StatusEvent",
+      "description": "A history event for an application's status change",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "applicationId": { "type": "string" },
+        "status": { "type": "string", "enum": ["Draft", "Applied", "Interviewing", "Offer", "Rejected", "Accepted", "Withdrawn"] },
+        "date": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "applicationId", "status", "date", "createdAt"]
+    },
+    "Contact": {
+      "title": "Contact",
+      "description": "An inbound contact from a recruiter or company",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "company": { "type": "string" },
+        "role": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "dateContacted": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "name", "company", "dateContacted", "createdAt"]
+    },
+    "Attachment": {
+      "title": "Attachment",
+      "description": "A file attached to a job application",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "applicationId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "size": { "type": "number" },
+        "data": { "type": "string", "description": "Base64 encoded file data (if small)" },
+        "hasChunks": { "type": "boolean" },
+        "chunkCount": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "applicationId", "name", "type", "size", "createdAt"]
+    },
+    "AttachmentChunk": {
+      "title": "AttachmentChunk",
+      "description": "A chunk of a large attachment file",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "attachmentId": { "type": "string" },
+        "chunkIndex": { "type": "number" },
+        "data": { "type": "string" }
+      },
+      "required": ["id", "userId", "attachmentId", "chunkIndex", "data"]
+    }
+  },
+  "firestore": {
+    "/applications/{applicationId}": {
+      "schema": { "$ref": "#/entities/Application" },
+      "description": "User's job applications"
+    },
+    "/status_events/{eventId}": {
+      "schema": { "$ref": "#/entities/StatusEvent" },
+      "description": "History of status changes for applications"
+    },
+    "/contacts/{contactId}": {
+      "schema": { "$ref": "#/entities/Contact" },
+      "description": "Inbound contacts"
+    },
+    "/attachments/{attachmentId}": {
+      "schema": { "$ref": "#/entities/Attachment" },
+      "description": "Files attached to applications"
+    },
+    "/attachment_chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/AttachmentChunk" },
+      "description": "Chunks of large files"
+    }
+  }
+}
