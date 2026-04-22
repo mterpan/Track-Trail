@@ -109,6 +109,7 @@ export interface Contact {
   phone?: string;
   notes?: string;
   dateContacted: string; // ISO Date string
+  linkedinUrl?: string;
   createdAt: number;
 }
 

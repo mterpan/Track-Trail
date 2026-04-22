@@ -121,77 +121,71 @@ export default function Dashboard() {
             <p className="text-[#6b665e] mt-2 text-lg">Welcome back! Here's an overview of your job search.</p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-6">
             <button 
               onClick={() => navigate('/applications?status=Active')}
-              className="bg-white p-6 rounded-3xl shadow-sm border border-[#e8e4dc] relative overflow-hidden text-left hover:border-[#d97757] transition-all group"
+              className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-[#e8e4dc] text-left hover:border-[#d97757] transition-all flex flex-col w-full h-full"
             >
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-[#f4efe6] rounded-full opacity-50 group-hover:scale-110 transition-transform"></div>
-              <div className="flex flex-row items-center justify-between pb-4 relative">
+              <div className="flex flex-row items-center justify-between pb-4 w-full">
                 <h3 className="text-sm font-semibold text-[#6b665e] uppercase tracking-wider">Active Apps</h3>
                 <TrendingUp className="w-5 h-5 text-[#d97757]" />
               </div>
-              <div className="text-4xl font-bold text-[#2d2a26] relative">{stats.active}</div>
+              <div className="text-4xl font-bold text-[#2d2a26]">{stats.active}</div>
             </button>
 
             <button 
               onClick={() => navigate('/applications?status=Interviewing')}
-              className="bg-white p-6 rounded-3xl shadow-sm border border-[#e8e4dc] relative overflow-hidden text-left hover:border-purple-400 transition-all group"
+              className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-[#e8e4dc] text-left hover:border-purple-400 transition-all flex flex-col w-full h-full"
             >
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-purple-50 rounded-full opacity-50 group-hover:scale-110 transition-transform"></div>
-              <div className="flex flex-row items-center justify-between pb-4 relative">
+              <div className="flex flex-row items-center justify-between pb-4 w-full">
                 <h3 className="text-sm font-semibold text-[#6b665e] uppercase tracking-wider">Interviewing</h3>
                 <Clock className="w-5 h-5 text-purple-500" />
               </div>
-              <div className="text-4xl font-bold text-[#2d2a26] relative">{stats.interviewing}</div>
+              <div className="text-4xl font-bold text-[#2d2a26]">{stats.interviewing}</div>
             </button>
 
             <button 
               onClick={() => navigate('/applications?status=Offer')}
-              className="bg-white p-6 rounded-3xl shadow-sm border border-[#e8e4dc] relative overflow-hidden text-left hover:border-green-400 transition-all group"
+              className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-[#e8e4dc] text-left hover:border-green-400 transition-all flex flex-col w-full h-full"
             >
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-green-50 rounded-full opacity-50 group-hover:scale-110 transition-transform"></div>
-              <div className="flex flex-row items-center justify-between pb-4 relative">
+              <div className="flex flex-row items-center justify-between pb-4 w-full">
                 <h3 className="text-sm font-semibold text-[#6b665e] uppercase tracking-wider">Offers</h3>
                 <CheckCircle className="w-5 h-5 text-green-500" />
               </div>
-              <div className="text-4xl font-bold text-[#2d2a26] relative">{stats.offers}</div>
+              <div className="text-4xl font-bold text-[#2d2a26]">{stats.offers}</div>
             </button>
 
             <button 
               onClick={() => navigate('/applications?status=Rejected')}
-              className="bg-white p-6 rounded-3xl shadow-sm border border-[#e8e4dc] relative overflow-hidden text-left hover:border-red-400 transition-all group"
+              className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-[#e8e4dc] text-left hover:border-red-400 transition-all flex flex-col w-full h-full"
             >
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-red-50 rounded-full opacity-50 group-hover:scale-110 transition-transform"></div>
-              <div className="flex flex-row items-center justify-between pb-4 relative">
+              <div className="flex flex-row items-center justify-between pb-4 w-full">
                 <h3 className="text-sm font-semibold text-[#6b665e] uppercase tracking-wider">Rejected</h3>
                 <XCircle className="w-5 h-5 text-red-500" />
               </div>
-              <div className="text-4xl font-bold text-[#2d2a26] relative">{stats.rejected}</div>
+              <div className="text-4xl font-bold text-[#2d2a26]">{stats.rejected}</div>
             </button>
 
             <button 
               onClick={() => navigate('/applications')}
-              className="bg-white p-6 rounded-3xl shadow-sm border border-[#e8e4dc] relative overflow-hidden text-left hover:border-[#d97757] transition-all group"
+              className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-[#e8e4dc] text-left hover:border-[#d97757] transition-all flex flex-col w-full h-full"
             >
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-[#f4efe6] rounded-full opacity-50 group-hover:scale-110 transition-transform"></div>
-              <div className="flex flex-row items-center justify-between pb-4 relative">
+              <div className="flex flex-row items-center justify-between pb-4 w-full">
                 <h3 className="text-sm font-semibold text-[#6b665e] uppercase tracking-wider">Total Apps</h3>
                 <Briefcase className="w-5 h-5 text-[#d97757]" />
               </div>
-              <div className="text-4xl font-bold text-[#2d2a26] relative">{stats.total}</div>
+              <div className="text-4xl font-bold text-[#2d2a26]">{stats.total}</div>
             </button>
 
             <button 
               onClick={() => navigate('/contacts')}
-              className="bg-white p-6 rounded-3xl shadow-sm border border-[#e8e4dc] relative overflow-hidden text-left hover:border-[#d97757] transition-all group"
+              className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-[#e8e4dc] text-left hover:border-[#d97757] transition-all flex flex-col w-full h-full"
             >
-              <div className="absolute -right-4 -top-4 w-24 h-24 bg-[#f4efe6] rounded-full opacity-50 group-hover:scale-110 transition-transform"></div>
-              <div className="flex flex-row items-center justify-between pb-4 relative">
+              <div className="flex flex-row items-center justify-between pb-4 w-full">
                 <h3 className="text-sm font-semibold text-[#6b665e] uppercase tracking-wider">New Contacts</h3>
                 <UserPlus className="w-5 h-5 text-[#d97757]" />
               </div>
-              <div className="text-4xl font-bold text-[#2d2a26] relative">{stats.contactsThisWeek}</div>
+              <div className="text-4xl font-bold text-[#2d2a26]">{stats.contactsThisWeek}</div>
               <div className="text-[10px] text-[#6b665e] font-bold uppercase tracking-wider mt-1">This Week</div>
             </button>
           </div>

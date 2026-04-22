@@ -45,6 +45,7 @@
         "role": { "type": "string" },
         "email": { "type": "string" },
         "phone": { "type": "string" },
+        "linkedinUrl": { "type": "string" },
         "dateContacted": { "type": "string" },
         "notes": { "type": "string" },
         "createdAt": { "type": "number" }

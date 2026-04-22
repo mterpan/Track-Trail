@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Trash2, Mail, Phone, Building2, Users } from 'lucide-react';
+import { Plus, Trash2, Mail, Phone, Building2, Users, ExternalLink, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth } from '@/lib/firebase';
 import { Loading } from '@/components/ui/loading';
@@ -23,6 +23,7 @@ import {
 export default function Contacts() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<string | null>(null);
@@ -33,6 +34,7 @@ export default function Contacts() {
   const [role, setRole] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [linkedinUrl, setLinkedinUrl] = useState('');
   const [dateContacted, setDateContacted] = useState(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
 
@@ -56,32 +58,60 @@ export default function Contacts() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const newContact: Contact = {
-        id: crypto.randomUUID(),
+      const contactData: Contact = {
+        id: editingContact ? editingContact.id : crypto.randomUUID(),
         userId: auth.currentUser?.uid || '',
         name,
         company,
         role,
         email,
         phone,
+        linkedinUrl,
         dateContacted,
         notes,
-        createdAt: Date.now()
+        createdAt: editingContact ? editingContact.createdAt : Date.now()
       };
       
-      await saveContact(newContact);
+      await saveContact(contactData);
       
       setIsAddOpen(false);
-      setName('');
-      setCompany('');
-      setRole('');
-      setEmail('');
-      setPhone('');
-      setDateContacted(new Date().toISOString().split('T')[0]);
-      setNotes('');
+      setEditingContact(null);
+      resetForm();
       await loadContacts();
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const resetForm = () => {
+    setName('');
+    setCompany('');
+    setRole('');
+    setEmail('');
+    setPhone('');
+    setLinkedinUrl('');
+    setDateContacted(new Date().toISOString().split('T')[0]);
+    setNotes('');
+  };
+
+  const handleEdit = (contact: Contact) => {
+    setEditingContact(contact);
+    setName(contact.name);
+    setCompany(contact.company);
+    setRole(contact.role || '');
+    setEmail(contact.email || '');
+    setPhone(contact.phone || '');
+    setLinkedinUrl(contact.linkedinUrl || '');
+    setDateContacted(contact.dateContacted);
+    setNotes(contact.notes || '');
+    setIsAddOpen(true);
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setIsAddOpen(open);
+    if (!open) {
+      setEditingContact(null);
+      resetForm();
     }
   };
 
@@ -112,7 +142,7 @@ export default function Contacts() {
           <p className="text-[#6b665e] mt-2 text-base md:text-lg">People who reached out to you</p>
         </div>
         
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+        <Dialog open={isAddOpen} onOpenChange={handleOpenChange}>
           <DialogTrigger asChild>
             <Button className="gap-2 bg-[#d97757] hover:bg-[#c26548] text-white rounded-xl shadow-sm h-11 px-6 w-full sm:w-auto">
               <Plus className="w-5 h-5" />
@@ -121,7 +151,9 @@ export default function Contacts() {
           </DialogTrigger>
           <DialogContent className="rounded-3xl sm:max-w-[500px] p-6 md:p-8">
             <DialogHeader>
-              <DialogTitle className="font-serif text-2xl text-[#2d2a26]">Add New Contact</DialogTitle>
+              <DialogTitle className="font-serif text-2xl text-[#2d2a26]">
+                {editingContact ? 'Edit Contact' : 'Add New Contact'}
+              </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleAdd} className="space-y-5 pt-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -149,6 +181,10 @@ export default function Contacts() {
                 </div>
               </div>
               <div className="space-y-2">
+                <Label htmlFor="linkedinUrl" className="text-[#6b665e]">LinkedIn Profile URL</Label>
+                <Input id="linkedinUrl" type="url" value={linkedinUrl} onChange={e => setLinkedinUrl(e.target.value)} placeholder="https://linkedin.com/in/username" className="rounded-xl border-[#e8e4dc] focus-visible:ring-[#d97757]" />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="dateContacted" className="text-[#6b665e]">Date Contacted</Label>
                 <Input id="dateContacted" type="date" value={dateContacted} onChange={e => setDateContacted(e.target.value)} required className="rounded-xl border-[#e8e4dc] focus-visible:ring-[#d97757]" />
               </div>
@@ -157,7 +193,9 @@ export default function Contacts() {
                 <Textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="rounded-xl border-[#e8e4dc] focus-visible:ring-[#d97757] resize-none" />
               </div>
               <div className="pt-6 flex justify-end">
-                <Button type="submit" loading={submitting} className="bg-[#d97757] hover:bg-[#c26548] text-white rounded-xl w-full h-11">Save Contact</Button>
+                <Button type="submit" loading={submitting} className="bg-[#d97757] hover:bg-[#c26548] text-white rounded-xl w-full h-11">
+                  {editingContact ? 'Update Contact' : 'Save Contact'}
+                </Button>
               </div>
             </form>
           </DialogContent>
@@ -176,14 +214,24 @@ export default function Contacts() {
         ) : (
           contacts.map(contact => (
             <div key={contact.id} className="bg-white rounded-3xl border border-[#e8e4dc] p-6 shadow-sm relative group hover:shadow-md transition-all">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-600 rounded-xl"
-                onClick={() => setContactToDelete(contact.id)}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
+              <div className="absolute top-4 right-4 flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="hover:bg-blue-50 hover:text-blue-600 rounded-xl w-8 h-8"
+                  onClick={() => handleEdit(contact)}
+                >
+                  <Pencil className="w-4 h-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="hover:bg-red-50 hover:text-red-600 rounded-xl w-8 h-8"
+                  onClick={() => setContactToDelete(contact.id)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
               
               <div className="mb-5">
                 <h3 className="font-bold text-xl text-[#2d2a26] font-serif pr-8">{contact.name}</h3>
@@ -206,7 +254,13 @@ export default function Contacts() {
                     <a href={`tel:${contact.phone}`} className="hover:text-[#d97757] transition-colors font-medium">{contact.phone}</a>
                   </div>
                 )}
-                {!contact.email && !contact.phone && (
+                {contact.linkedinUrl && (
+                  <div className="flex items-center text-[#6b665e]">
+                    <ExternalLink className="w-4 h-4 mr-3 text-[#d97757]" />
+                    <a href={contact.linkedinUrl} target="_blank" rel="noopener noreferrer" className="hover:text-[#d97757] transition-colors font-medium">LinkedIn Profile</a>
+                  </div>
+                )}
+                {!contact.email && !contact.phone && !contact.linkedinUrl && (
                   <div className="text-[#6b665e] italic">No contact info provided</div>
                 )}
               </div>
