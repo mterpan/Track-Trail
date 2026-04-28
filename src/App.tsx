@@ -14,6 +14,7 @@ import Login from '@/pages/Login';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { Toaster } from '@/components/ui/sonner';
+import { isDemoMode } from '@/lib/db';
 
 import { motion, AnimatePresence } from 'motion/react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -22,20 +23,39 @@ import { Loading } from '@/components/ui/loading';
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [demoActive, setDemoActive] = useState(isDemoMode());
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
+      // If we sign in for real, disable demo mode
+      if (currentUser) setDemoActive(false);
     });
     return () => unsubscribe();
   }, []);
+
+  // Listen for demo mode changes (e.g. from Login page)
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setDemoActive(isDemoMode());
+    };
+    window.addEventListener('storage', handleStorageChange);
+    // Custom event for same-tab updates
+    window.addEventListener('demoModeChanged', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('demoModeChanged', handleStorageChange);
+    };
+  }, []);
+
+  const isAuthenticated = !!user || demoActive;
 
   return (
     <AnimatePresence mode="wait">
       {loading ? (
         <Loading key="loading" fullPage text="Initializing Track&Trail..." />
-      ) : !user ? (
+      ) : !isAuthenticated ? (
         <motion.div
           key="login"
           initial={{ opacity: 0 }}

@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Plus, Briefcase, Filter, X } from 'lucide-react';
+import { formatAppDate, isFirestoreQuotaError } from '@/lib/utils';
+import { Plus, Briefcase, Filter, X, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth } from '@/lib/firebase';
 import { Loading } from '@/components/ui/loading';
@@ -14,11 +15,13 @@ import { Loading } from '@/components/ui/loading';
 export default function Applications() {
   const [searchParams, setSearchParams] = useSearchParams();
   const statusFilter = (searchParams.get('status') as ApplicationStatus | 'All' | 'Active') || 'All';
+  const customFilter = searchParams.get('filter');
 
   const [applications, setApplications] = useState<Application[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
 
   // Form state
   const [company, setCompany] = useState('');
@@ -32,8 +35,12 @@ export default function Applications() {
       const apps = await getApplications();
       apps.sort((a, b) => new Date(b.dateApplied).getTime() - new Date(a.dateApplied).getTime());
       setApplications(apps);
+      setQuotaExceeded(false);
     } catch (err) {
       console.error('Failed to load applications:', err);
+      if (isFirestoreQuotaError(err)) {
+        setQuotaExceeded(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -44,10 +51,24 @@ export default function Applications() {
   }, []);
 
   const filteredApplications = useMemo(() => {
-    if (statusFilter === 'All') return applications;
-    if (statusFilter === 'Active') return applications.filter(app => app.status !== 'Rejected');
-    return applications.filter(app => app.status === statusFilter);
-  }, [applications, statusFilter]);
+    let filtered = applications;
+    
+    if (customFilter === 'Stale') {
+      const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+      filtered = filtered.filter(app => 
+        app.status !== 'Rejected' && 
+        app.updatedAt < twoWeeksAgo
+      );
+    }
+
+    if (statusFilter === 'Active') {
+      filtered = filtered.filter(app => app.status !== 'Rejected');
+    } else if (statusFilter !== 'All') {
+      filtered = filtered.filter(app => app.status === statusFilter);
+    }
+    
+    return filtered;
+  }, [applications, statusFilter, customFilter]);
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,6 +112,7 @@ export default function Applications() {
   };
 
   const setFilter = (status: string) => {
+    searchParams.delete('filter'); // Clear special filters when changing status
     if (status === 'All') {
       searchParams.delete('status');
     } else {
@@ -112,10 +134,42 @@ export default function Applications() {
           transition={{ duration: 0.3, ease: "easeOut" }}
           className="space-y-8"
         >
+          {quotaExceeded && (
+            <div className="bg-red-50 border border-red-200 rounded-3xl p-6 flex flex-col md:flex-row items-center gap-6 shadow-sm">
+              <div className="bg-red-100 p-4 rounded-2xl">
+                <AlertCircle className="w-8 h-8 text-red-600" />
+              </div>
+              <div className="flex-1 text-center md:text-left">
+                <h2 className="text-xl font-bold text-red-900 font-serif">Firestore Quota Exceeded</h2>
+                <p className="text-red-700 mt-2 leading-relaxed">
+                  You've reached the free tier limit for database reads. 
+                  Your applications cannot be loaded right now. 
+                  Please try again later or tomorrow.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-[#2d2a26] font-serif">Applications</h1>
           <p className="text-[#6b665e] mt-2 text-base md:text-lg">Manage and track your job applications.</p>
+          {customFilter === 'Stale' && (
+            <div className="flex items-center gap-2 mt-4 px-3 py-1.5 bg-orange-50 border border-orange-100 text-orange-700 rounded-xl text-sm font-medium w-fit">
+              <AlertCircle className="w-4 h-4 text-orange-500" />
+              Stale Applications (+2 weeks)
+              <button 
+                onClick={() => {
+                  searchParams.delete('filter');
+                  setSearchParams(searchParams);
+                }}
+                className="ml-1 hover:bg-orange-200/50 rounded-full p-0.5 transition-colors"
+                title="Clear filter"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
         </div>
         
         <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -204,12 +258,15 @@ export default function Applications() {
               <Briefcase className="w-8 h-8 md:w-10 md:h-10 text-[#d97757]" />
             </div>
             <p className="text-xl font-medium mb-2">
-              {statusFilter === 'All' ? 'No applications yet.' : 
+              {customFilter === 'Stale' ? 'No stale applications found.' :
+               statusFilter === 'All' ? 'No applications yet.' : 
                statusFilter === 'Active' ? 'No active applications.' :
                `No applications with status "${statusFilter}".`}
             </p>
             <p>
-              {statusFilter === 'All' 
+              {customFilter === 'Stale'
+                ? 'Great job! All your active applications are up to date.'
+                : statusFilter === 'All' 
                 ? 'Click "Add Application" to start tracking your job search.' 
                 : 'Try changing the filter or add a new application.'}
             </p>
@@ -250,7 +307,7 @@ export default function Applications() {
                   <div className="flex items-center gap-2">
                     <span className="font-medium">Applied on</span>
                     <span className="font-bold text-[#2d2a26]">
-                      {new Date(app.dateApplied).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {formatAppDate(app.dateApplied, { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
                   </div>
                 </div>

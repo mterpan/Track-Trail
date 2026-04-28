@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { getApplications, getContacts, Application, Contact } from '@/lib/db';
-import { Briefcase, CheckCircle, XCircle, Clock, TrendingUp, Users, UserPlus } from 'lucide-react';
+import { Briefcase, CheckCircle, XCircle, Clock, TrendingUp, Users, AlertCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
+import { formatAppDate, isFirestoreQuotaError } from '@/lib/utils';
 import { 
   BarChart, 
   Bar, 
@@ -24,6 +25,7 @@ export default function Dashboard() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -36,8 +38,12 @@ export default function Dashboard() {
         apps.sort((a, b) => new Date(b.dateApplied).getTime() - new Date(a.dateApplied).getTime());
         setApplications(apps);
         setContacts(cts);
+        setQuotaExceeded(false);
       } catch (err) {
         console.error('Failed to load dashboard data:', err);
+        if (isFirestoreQuotaError(err)) {
+          setQuotaExceeded(true);
+        }
       } finally {
         setLoading(false);
       }
@@ -48,8 +54,8 @@ export default function Dashboard() {
 
   const stats = useMemo(() => {
     const now = new Date();
-    const startOfThisWeek = startOfWeek(now);
-    const endOfThisWeek = endOfWeek(now);
+    const startOfThisWeek = startOfWeek(now, { weekStartsOn: 1 });
+    const endOfThisWeek = endOfWeek(now, { weekStartsOn: 1 });
 
     return {
       total: applications.length,
@@ -58,10 +64,10 @@ export default function Dashboard() {
       interviewing: applications.filter(a => a.status === 'Interviewing').length,
       offers: applications.filter(a => a.status === 'Offer' || a.status === 'Accepted').length,
       rejected: applications.filter(a => a.status === 'Rejected').length,
-      contactsThisWeek: contacts.filter(c => {
-        const contactDate = parseISO(c.dateContacted);
-        return isWithinInterval(contactDate, { start: startOfThisWeek, end: endOfThisWeek });
-      }).length,
+      staleActive: applications.filter(a => 
+        a.status !== 'Rejected' && 
+        a.updatedAt < (now.getTime() - 14 * 24 * 60 * 60 * 1000)
+      ).length,
     };
   }, [applications, contacts]);
 
@@ -69,8 +75,8 @@ export default function Dashboard() {
     const weeks = [];
     for (let i = 5; i >= 0; i--) {
       const date = subWeeks(new Date(), i);
-      const start = startOfWeek(date);
-      const end = endOfWeek(date);
+      const start = startOfWeek(date, { weekStartsOn: 1 });
+      const end = endOfWeek(date, { weekStartsOn: 1 });
       
       const appCount = applications.filter(app => {
         const appDate = parseISO(app.dateApplied);
@@ -116,6 +122,22 @@ export default function Dashboard() {
           transition={{ duration: 0.3, ease: "easeOut" }}
           className="space-y-8"
         >
+          {quotaExceeded && (
+            <div className="bg-red-50 border border-red-200 rounded-3xl p-6 flex flex-col md:flex-row items-center gap-6 shadow-sm">
+              <div className="bg-red-100 p-4 rounded-2xl">
+                <AlertCircle className="w-8 h-8 text-red-600" />
+              </div>
+              <div className="flex-1 text-center md:text-left">
+                <h2 className="text-xl font-bold text-red-900 font-serif">Firestore Quota Exceeded</h2>
+                <p className="text-red-700 mt-2 leading-relaxed">
+                  You've reached the free tier limit for database reads (50,000 per day). 
+                  Your data is safe, but it cannot be loaded right now. 
+                  Please wait until the quota resets (usually at midnight US Pacific Time) or upgrade your Firebase project.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div>
             <h1 className="text-4xl font-bold tracking-tight text-[#2d2a26] font-serif">Dashboard</h1>
             <p className="text-[#6b665e] mt-2 text-lg">Welcome back! Here's an overview of your job search.</p>
@@ -167,6 +189,18 @@ export default function Dashboard() {
             </button>
 
             <button 
+              onClick={() => navigate('/applications?filter=Stale')}
+              className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-[#e8e4dc] text-left hover:border-orange-400 transition-all flex flex-col w-full h-full group"
+            >
+              <div className="flex flex-row items-center justify-between pb-4 w-full">
+                <h3 className="text-sm font-semibold text-[#6b665e] uppercase tracking-wider">Stale Apps</h3>
+                <AlertCircle className="w-5 h-5 text-orange-500" />
+              </div>
+              <div className="text-4xl font-bold text-[#2d2a26]">{stats.staleActive}</div>
+              <div className="text-[10px] text-[#6b665e] font-bold uppercase tracking-wider mt-1">+2 Weeks Old</div>
+            </button>
+
+            <button 
               onClick={() => navigate('/applications')}
               className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-[#e8e4dc] text-left hover:border-[#d97757] transition-all flex flex-col w-full h-full"
             >
@@ -175,18 +209,6 @@ export default function Dashboard() {
                 <Briefcase className="w-5 h-5 text-[#d97757]" />
               </div>
               <div className="text-4xl font-bold text-[#2d2a26]">{stats.total}</div>
-            </button>
-
-            <button 
-              onClick={() => navigate('/contacts')}
-              className="bg-white p-4 sm:p-6 rounded-3xl shadow-sm border border-[#e8e4dc] text-left hover:border-[#d97757] transition-all flex flex-col w-full h-full"
-            >
-              <div className="flex flex-row items-center justify-between pb-4 w-full">
-                <h3 className="text-sm font-semibold text-[#6b665e] uppercase tracking-wider">New Contacts</h3>
-                <UserPlus className="w-5 h-5 text-[#d97757]" />
-              </div>
-              <div className="text-4xl font-bold text-[#2d2a26]">{stats.contactsThisWeek}</div>
-              <div className="text-[10px] text-[#6b665e] font-bold uppercase tracking-wider mt-1">This Week</div>
             </button>
           </div>
 
@@ -213,8 +235,10 @@ export default function Dashboard() {
                       dataKey="name" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: '#6b665e', fontSize: 12 }}
+                      tick={{ fill: '#6b665e', fontSize: 10 }}
                       dy={10}
+                      interval={0}
+                      minTickGap={5}
                     />
                     <YAxis 
                       axisLine={false} 
@@ -337,7 +361,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2">
                         <span className="font-medium">Applied on</span>
                         <span className="font-bold text-[#2d2a26]">
-                          {new Date(app.dateApplied).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {formatAppDate(app.dateApplied, { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
                       </div>
                     </div>

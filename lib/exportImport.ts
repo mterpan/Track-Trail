@@ -2,14 +2,33 @@ import JSZip from 'jszip';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import { getApplications, getStatusEvents, getAttachments, getContacts, saveApplication, saveStatusEvent, saveAttachment, saveContact, clearAllData, Application, StatusEvent, Attachment, Contact, ApplicationStatus } from './db';
+import { getApplications, getAllStatusEvents, getAllAttachments, getAttachmentData, getContacts, saveApplication, saveStatusEvent, saveAttachment, saveContact, clearAllData, Application, StatusEvent, Attachment, Contact, ApplicationStatus } from './db';
 import { auth } from './firebase';
 
 export async function exportData() {
   const zip = new JSZip();
   
-  const applications = await getApplications();
-  const contacts = await getContacts();
+  const [applications, allStatusEvents, allAttachments, contacts] = await Promise.all([
+    getApplications(),
+    getAllStatusEvents(),
+    getAllAttachments(),
+    getContacts()
+  ]);
+  
+  // Group events and attachments by applicationId for faster access
+  const eventsByApp = allStatusEvents.reduce((acc, ev) => {
+    if (!acc[ev.applicationId]) acc[ev.applicationId] = [];
+    acc[ev.applicationId].push(ev);
+    return acc;
+  }, {} as Record<string, StatusEvent[]>);
+
+  const attachmentsByApp = allAttachments.reduce((acc, att) => {
+    if (att.applicationId) {
+      if (!acc[att.applicationId]) acc[att.applicationId] = [];
+      acc[att.applicationId].push(att);
+    }
+    return acc;
+  }, {} as Record<string, Attachment[]>);
   
   // Create Excel Workbook with ExcelJS for styling
   const workbook = new ExcelJS.Workbook();
@@ -126,7 +145,7 @@ export async function exportData() {
 
   const allEventsCount: number[] = [0]; // Use array to pass by reference for counting
   for (const app of applications) {
-    const events = await getStatusEvents(app.id);
+    const events = eventsByApp[app.id] || [];
     events.forEach(ev => {
       const row = wsEvents.addRow({
         appId: ev.applicationId,
@@ -160,7 +179,7 @@ export async function exportData() {
   let totalAttachments = 0;
   
   for (const app of applications) {
-    const attachments = await getAttachments(app.id);
+    const attachments = attachmentsByApp[app.id] || [];
     if (attachments.length > 0) {
       const safeCompany = app.company.replace(/[^a-z0-9]/gi, '_');
       const safeTitle = app.title.replace(/[^a-z0-9]/gi, '_');
@@ -177,16 +196,20 @@ export async function exportData() {
           size: att.size
         });
         
-        // Convert base64 back to Uint8Array for ZIP
-        const binaryString = window.atob(att.data);
-        const len = binaryString.length;
-        const bytes = new Uint8Array(len);
-        for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
+        // Fetch full data for each attachment only when exporting
+        const data = att.data || await getAttachmentData(att);
+        if (data) {
+          // Convert base64 back to Uint8Array for ZIP
+          const binaryString = window.atob(data);
+          const len = binaryString.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          
+          appFolder?.file(att.name, bytes);
+          totalAttachments++;
         }
-        
-        appFolder?.file(att.name, bytes);
-        totalAttachments++;
       }
     }
   }

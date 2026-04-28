@@ -23,7 +23,8 @@ import {
 } from "@/components/ui/dialog";
 import { logout } from '@/lib/firebase';
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Play, Info } from 'lucide-react';
+import { isDemoMode, setDemoMode } from '@/lib/db';
 
 export default function Layout() {
   const location = useLocation();
@@ -34,6 +35,16 @@ export default function Layout() {
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const demoActive = isDemoMode();
+
+  const handleLogout = async () => {
+    if (demoActive) {
+      setDemoMode(false);
+      window.dispatchEvent(new Event('demoModeChanged'));
+    } else {
+      await logout();
+    }
+  };
 
   const handleExport = async () => {
     try {
@@ -41,7 +52,12 @@ export default function Layout() {
       toast.success('Data exported successfully');
     } catch (err) {
       console.error('Export failed', err);
-      toast.error('Failed to export data.');
+      const isQuotaError = err instanceof Error && (err.message.includes('Quota exceeded') || err.message.includes('quota'));
+      if (isQuotaError) {
+        toast.error('Export failed: Firestore daily free quota exceeded. Please try again tomorrow.');
+      } else {
+        toast.error('Failed to export data.');
+      }
     }
   };
 
@@ -166,11 +182,11 @@ export default function Layout() {
           </button>
 
           <button 
-            onClick={logout}
+            onClick={handleLogout}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-all mt-4"
           >
             <LogOut className="w-5 h-5" />
-            Sign Out
+            {demoActive ? 'Exit Demo' : 'Sign Out'}
           </button>
         </div>
       </aside>
@@ -230,13 +246,13 @@ export default function Layout() {
             </button>
             <button 
               onClick={() => {
-                logout();
+                handleLogout();
                 setIsMoreMenuOpen(false);
               }}
               className="flex items-center gap-3 px-4 py-4 rounded-2xl bg-red-50 text-red-600 font-medium border border-red-100 mt-2"
             >
               <LogOut className="w-5 h-5" />
-              Sign Out
+              {demoActive ? 'Exit Demo' : 'Sign Out'}
             </button>
           </div>
         </DialogContent>
@@ -244,6 +260,13 @@ export default function Layout() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-auto">
+        {demoActive && (
+          <div className="bg-[#d97757] text-white px-4 py-2 text-center text-xs font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-sm">
+            <Play className="w-3 h-3 fill-current" />
+            Demo Mode Active &bull; Data is stored locally
+            <Info className="w-3 h-3 ml-2 cursor-help opacity-80" />
+          </div>
+        )}
         <div className="p-4 md:p-8 max-w-6xl mx-auto">
           <Outlet />
         </div>

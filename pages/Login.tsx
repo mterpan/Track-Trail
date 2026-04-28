@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { signInWithGoogle } from '@/lib/firebase';
-import { Briefcase } from 'lucide-react';
+import { Briefcase, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { setDemoMode } from '@/lib/db';
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
@@ -14,6 +15,11 @@ export default function Login() {
       console.error('Login failed:', err);
       setLoading(false);
     }
+  };
+
+  const handleDemo = () => {
+    setDemoMode(true);
+    window.dispatchEvent(new Event('demoModeChanged'));
   };
 
   return (
@@ -40,6 +46,24 @@ export default function Login() {
             </svg>
           )}
           Continue with Google
+        </Button>
+
+        <div className="relative my-8">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-[#e8e4dc]"></span>
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-white px-4 text-[#6b665e] font-medium tracking-wider">Or explore first</span>
+          </div>
+        </div>
+
+        <Button 
+          onClick={handleDemo}
+          variant="ghost"
+          className="w-full h-12 gap-3 bg-[#faf8f5] text-[#d97757] font-bold rounded-xl hover:bg-[#f4efe6] transition-all"
+        >
+          <Play className="w-4 h-4 fill-current" />
+          Try Demo Mode
         </Button>
       </div>
     </div>

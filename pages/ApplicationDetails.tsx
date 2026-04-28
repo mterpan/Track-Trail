@@ -1,17 +1,18 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getApplication, getStatusEvents, getAttachments, saveApplication, saveStatusEvent, saveAttachment, deleteAttachment, deleteApplication, Application, StatusEvent, Attachment, ApplicationStatus } from '@/lib/db';
+import { getApplication, getStatusEvents, getAttachments, getAttachmentData, saveApplication, saveStatusEvent, saveAttachment, deleteAttachment, deleteApplication, Application, StatusEvent, Attachment, ApplicationStatus } from '@/lib/db';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Trash2, Download, FileText, Plus, Briefcase, Link as LinkIcon, Calendar, Clock, Eye, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Trash2, Download, FileText, Plus, Briefcase, Link as LinkIcon, Calendar, Clock, Eye, Image as ImageIcon, AlertCircle } from 'lucide-react';
 import { saveAs } from 'file-saver';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth } from '@/lib/firebase';
 import { Loading } from '@/components/ui/loading';
+import { formatAppDate, isFirestoreQuotaError } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,6 +31,7 @@ export default function ApplicationDetails() {
   const [events, setEvents] = useState<StatusEvent[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +47,7 @@ export default function ApplicationDetails() {
   const [editCompany, setEditCompany] = useState('');
   const [editTitle, setEditTitle] = useState('');
   const [editUrl, setEditUrl] = useState('');
+  const [editDateApplied, setEditDateApplied] = useState('');
   const [editNotes, setEditNotes] = useState('');
 
   // Delete Dialogs
@@ -68,6 +71,7 @@ export default function ApplicationDetails() {
       setEditCompany(application.company);
       setEditTitle(application.title);
       setEditUrl(application.url || '');
+      setEditDateApplied(application.dateApplied);
       setEditNotes(application.notes || '');
       setNewStatus(application.status);
 
@@ -77,8 +81,12 @@ export default function ApplicationDetails() {
 
       const atts = await getAttachments(id);
       setAttachments(atts);
+      setQuotaExceeded(false);
     } catch (err) {
       console.error('Failed to load application details:', err);
+      if (isFirestoreQuotaError(err)) {
+        setQuotaExceeded(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -129,10 +137,21 @@ export default function ApplicationDetails() {
         company: editCompany, 
         title: editTitle, 
         url: editUrl, 
+        dateApplied: editDateApplied,
         notes: editNotes,
         updatedAt: Date.now() 
       };
       await saveApplication(updatedApp);
+      
+      // Also update the initial event if its date doesn't match the new dateApplied
+      const firstEvent = events.find(e => e.notes === 'Application created');
+      if (firstEvent && firstEvent.date !== editDateApplied) {
+        await saveStatusEvent({
+          ...firstEvent,
+          date: editDateApplied
+        });
+      }
+
       setIsEditOpen(false);
       await loadData();
     } finally {
@@ -181,39 +200,54 @@ export default function ApplicationDetails() {
     }
   };
 
-  const handleDownload = (att: Attachment) => {
-    // Convert base64 back to Uint8Array
-    const binaryString = window.atob(att.data);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
+  const handleDownload = async (att: Attachment) => {
+    try {
+      const data = att.data || await getAttachmentData(att);
+      if (!data) {
+        console.error('Attachment data is empty or missing');
+        return;
+      }
+
+      // Convert base64 back to Uint8Array
+      const binaryString = window.atob(data);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      const blob = new Blob([bytes], { type: att.type });
+      saveAs(blob, att.name);
+    } catch (err) {
+      console.error('Failed to download attachment:', err);
     }
-    
-    const blob = new Blob([bytes], { type: att.type });
-    saveAs(blob, att.name);
   };
 
-  const handlePreview = (att: Attachment) => {
-    console.log('Previewing attachment:', att.name, att.type, att.data.length);
-    if (!att.data || att.data.length === 0) {
-      console.error('Attachment data is empty or missing');
-      return;
-    }
+  const handlePreview = async (att: Attachment) => {
+    console.log('Previewing attachment:', att.name, att.type);
+    try {
+      const data = att.data || await getAttachmentData(att);
+      if (!data || data.length === 0) {
+        console.error('Attachment data is empty or missing');
+        return;
+      }
 
-    // Convert base64 back to Uint8Array
-    const binaryString = window.atob(att.data);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
+      // Convert base64 back to Uint8Array
+      const binaryString = window.atob(data);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
 
-    const blob = new Blob([bytes], { type: att.type });
-    const url = URL.createObjectURL(blob);
-    setPreviewUrl(url);
-    setPreviewName(att.name);
-    setPreviewType(att.type);
+      const blob = new Blob([bytes], { type: att.type });
+      const url = URL.createObjectURL(blob);
+      setPreviewUrl(url);
+      setPreviewName(att.name);
+      setPreviewType(att.type);
+    } catch (err) {
+      console.error('Failed to preview attachment:', err);
+    }
   };
 
   useEffect(() => {
@@ -250,6 +284,22 @@ export default function ApplicationDetails() {
           transition={{ duration: 0.3, ease: "easeOut" }}
           className="space-y-6 md:space-y-8"
         >
+          {quotaExceeded && (
+            <div className="bg-red-50 border border-red-200 rounded-3xl p-6 flex flex-col md:flex-row items-center gap-6 shadow-sm">
+              <div className="bg-red-100 p-4 rounded-2xl">
+                <AlertCircle className="w-8 h-8 text-red-600" />
+              </div>
+              <div className="flex-1 text-center md:text-left">
+                <h2 className="text-xl font-bold text-red-900 font-serif">Firestore Quota Exceeded</h2>
+                <p className="text-red-700 mt-2 leading-relaxed">
+                  You've reached the free tier limit for database reads. 
+                  This application's details might be incomplete. 
+                  Please try again later or tomorrow.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button variant="outline" size="icon" onClick={() => navigate('/applications')} className="rounded-xl border-[#e8e4dc] hover:bg-[#faf8f5] text-[#6b665e] shrink-0">
@@ -304,6 +354,10 @@ export default function ApplicationDetails() {
                   <Input id="url" type="url" value={editUrl} onChange={e => setEditUrl(e.target.value)} className="rounded-xl border-[#e8e4dc] focus-visible:ring-[#d97757]" />
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="dateApplied" className="text-[#6b665e]">Date Applied</Label>
+                  <Input id="dateApplied" type="date" value={editDateApplied} onChange={e => setEditDateApplied(e.target.value)} required className="rounded-xl border-[#e8e4dc] focus-visible:ring-[#d97757]" />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="notes" className="text-[#6b665e]">Notes</Label>
                   <Textarea id="notes" value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={4} className="rounded-xl border-[#e8e4dc] focus-visible:ring-[#d97757] resize-none" />
                 </div>
@@ -350,7 +404,7 @@ export default function ApplicationDetails() {
                     <Calendar className="w-4 h-4" />
                     Date Applied
                   </div>
-                  <div className="text-base md:text-lg font-medium text-[#2d2a26] mt-1">{new Date(app.dateApplied).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+                  <div className="text-base md:text-lg font-medium text-[#2d2a26] mt-1">{formatAppDate(app.dateApplied)}</div>
                 </div>
               </div>
               
@@ -487,7 +541,7 @@ export default function ApplicationDetails() {
                   <div key={ev.id} className="relative pl-6 md:pl-8">
                     <div className="absolute w-3 h-3 md:w-4 md:h-4 bg-[#d97757] rounded-full -left-[7px] md:-left-[9px] top-1 border-4 border-white shadow-sm"></div>
                     <div className="text-base md:text-lg font-bold text-[#2d2a26] leading-none">{ev.status}</div>
-                    <div className="text-xs md:text-sm font-medium text-[#6b665e] mt-1.5 uppercase tracking-wider">{new Date(ev.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                    <div className="text-xs md:text-sm font-medium text-[#6b665e] mt-1.5 uppercase tracking-wider">{formatAppDate(ev.date, { month: 'short', day: 'numeric', year: 'numeric' })}</div>
                     {ev.notes && (
                       <div className="text-xs md:text-sm text-[#6b665e] mt-3 bg-[#faf8f5] p-3 md:p-4 rounded-2xl border border-[#e8e4dc] leading-relaxed">
                         {ev.notes}

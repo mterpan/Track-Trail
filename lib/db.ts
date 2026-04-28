@@ -1,5 +1,6 @@
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 import { db as firestoreDb, auth } from './firebase';
+import { MOCK_APPLICATIONS, MOCK_STATUS_EVENTS, MOCK_CONTACTS } from './mockData';
 
 export enum OperationType {
   CREATE = 'create',
@@ -116,6 +117,9 @@ export interface Contact {
 // --- FIRESTORE FUNCTIONS ---
 
 export async function getApplications(): Promise<Application[]> {
+  if (isDemoMode()) {
+    return getDemoData<Application[]>('applications') || MOCK_APPLICATIONS;
+  }
   const user = auth.currentUser;
   if (!user) return [];
   const path = 'applications';
@@ -130,6 +134,10 @@ export async function getApplications(): Promise<Application[]> {
 }
 
 export async function getApplication(id: string): Promise<Application | undefined> {
+  if (isDemoMode()) {
+    const apps = getDemoData<Application[]>('applications') || MOCK_APPLICATIONS;
+    return apps.find(a => a.id === id);
+  }
   const user = auth.currentUser;
   if (!user) return undefined;
   const path = `applications/${id}`;
@@ -147,6 +155,14 @@ export async function getApplication(id: string): Promise<Application | undefine
 }
 
 export async function saveApplication(app: Application): Promise<void> {
+  if (isDemoMode()) {
+    const apps = getDemoData<Application[]>('applications') || [...MOCK_APPLICATIONS];
+    const index = apps.findIndex(a => a.id === app.id);
+    if (index >= 0) apps[index] = app;
+    else apps.push(app);
+    saveDemoData('applications', apps);
+    return;
+  }
   const user = auth.currentUser;
   if (!user) throw new Error("Must be logged in");
   const path = `applications/${app.id}`;
@@ -159,6 +175,17 @@ export async function saveApplication(app: Application): Promise<void> {
 }
 
 export async function deleteApplication(id: string): Promise<void> {
+  if (isDemoMode()) {
+    const apps = getDemoData<Application[]>('applications') || [...MOCK_APPLICATIONS];
+    saveDemoData('applications', apps.filter(a => a.id !== id));
+    
+    const events = getDemoData<StatusEvent[]>('status_events') || [...MOCK_STATUS_EVENTS];
+    saveDemoData('status_events', events.filter(e => e.applicationId !== id));
+    
+    const atts = getDemoData<Attachment[]>('attachments') || [];
+    saveDemoData('attachments', atts.filter(a => a.applicationId !== id));
+    return;
+  }
   const user = auth.currentUser;
   if (!user) throw new Error("Must be logged in");
   
@@ -199,6 +226,10 @@ export async function deleteApplication(id: string): Promise<void> {
 }
 
 export async function getStatusEvents(applicationId: string): Promise<StatusEvent[]> {
+  if (isDemoMode()) {
+    const events = getDemoData<StatusEvent[]>('status_events') || MOCK_STATUS_EVENTS;
+    return events.filter(e => e.applicationId === applicationId);
+  }
   const user = auth.currentUser;
   if (!user) return [];
   const path = 'status_events';
@@ -212,7 +243,32 @@ export async function getStatusEvents(applicationId: string): Promise<StatusEven
   }
 }
 
+export async function getAllStatusEvents(): Promise<StatusEvent[]> {
+  if (isDemoMode()) {
+    return getDemoData<StatusEvent[]>('status_events') || MOCK_STATUS_EVENTS;
+  }
+  const user = auth.currentUser;
+  if (!user) return [];
+  const path = 'status_events';
+  try {
+    const q = query(collection(firestoreDb, path), where('userId', '==', user.uid));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => doc.data() as StatusEvent);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+}
+
 export async function saveStatusEvent(event: StatusEvent): Promise<void> {
+  if (isDemoMode()) {
+    const events = getDemoData<StatusEvent[]>('status_events') || [...MOCK_STATUS_EVENTS];
+    const index = events.findIndex(e => e.id === event.id);
+    if (index >= 0) events[index] = event;
+    else events.push(event);
+    saveDemoData('status_events', events);
+    return;
+  }
   const user = auth.currentUser;
   if (!user) throw new Error("Must be logged in");
   const path = `status_events/${event.id}`;
@@ -225,6 +281,9 @@ export async function saveStatusEvent(event: StatusEvent): Promise<void> {
 }
 
 export async function getContacts(): Promise<Contact[]> {
+  if (isDemoMode()) {
+    return getDemoData<Contact[]>('contacts') || MOCK_CONTACTS;
+  }
   const user = auth.currentUser;
   if (!user) return [];
   const path = 'contacts';
@@ -239,6 +298,14 @@ export async function getContacts(): Promise<Contact[]> {
 }
 
 export async function saveContact(contact: Contact): Promise<void> {
+  if (isDemoMode()) {
+    const contacts = getDemoData<Contact[]>('contacts') || [...MOCK_CONTACTS];
+    const index = contacts.findIndex(c => c.id === contact.id);
+    if (index >= 0) contacts[index] = contact;
+    else contacts.push(contact);
+    saveDemoData('contacts', contacts);
+    return;
+  }
   const user = auth.currentUser;
   if (!user) throw new Error("Must be logged in");
   const path = `contacts/${contact.id}`;
@@ -251,6 +318,11 @@ export async function saveContact(contact: Contact): Promise<void> {
 }
 
 export async function deleteContact(id: string): Promise<void> {
+  if (isDemoMode()) {
+    const contacts = getDemoData<Contact[]>('contacts') || [...MOCK_CONTACTS];
+    saveDemoData('contacts', contacts.filter(c => c.id !== id));
+    return;
+  }
   const user = auth.currentUser;
   if (!user) throw new Error("Must be logged in");
   const path = `contacts/${id}`;
@@ -262,6 +334,13 @@ export async function deleteContact(id: string): Promise<void> {
 }
 
 export async function clearAllData(): Promise<void> {
+  if (isDemoMode()) {
+    localStorage.removeItem('trackntrail_demo_applications');
+    localStorage.removeItem('trackntrail_demo_status_events');
+    localStorage.removeItem('trackntrail_demo_contacts');
+    localStorage.removeItem('trackntrail_demo_attachments');
+    return;
+  }
   const user = auth.currentUser;
   if (!user) throw new Error("Must be logged in");
   
@@ -292,6 +371,10 @@ export async function clearAllData(): Promise<void> {
 // --- ATTACHMENT FUNCTIONS (Firestore) ---
 
 export async function getAttachments(applicationId: string): Promise<Attachment[]> {
+  if (isDemoMode()) {
+    const atts = getDemoData<Attachment[]>('attachments') || [];
+    return atts.filter(a => a.applicationId === applicationId);
+  }
   const user = auth.currentUser;
   if (!user) return [];
   const path = 'attachments';
@@ -299,18 +382,6 @@ export async function getAttachments(applicationId: string): Promise<Attachment[
     const q = query(collection(firestoreDb, path), where('applicationId', '==', applicationId), where('userId', '==', user.uid));
     const snapshot = await getDocs(q);
     const attachments = snapshot.docs.map(doc => doc.data() as Attachment);
-    
-    // Reassemble chunked attachments
-    for (const att of attachments) {
-      if (att.hasChunks) {
-        const chunksQ = query(collection(firestoreDb, 'attachment_chunks'), where('attachmentId', '==', att.id), where('userId', '==', user.uid));
-        const chunksSnapshot = await getDocs(chunksQ);
-        const chunks = chunksSnapshot.docs.map(doc => doc.data() as AttachmentChunk);
-        chunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
-        att.data = chunks.map(c => c.data).join('');
-      }
-    }
-    
     return attachments;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
@@ -318,9 +389,49 @@ export async function getAttachments(applicationId: string): Promise<Attachment[
   }
 }
 
+export async function getAllAttachments(): Promise<Attachment[]> {
+  const user = auth.currentUser;
+  if (!user) return [];
+  const path = 'attachments';
+  try {
+    const q = query(collection(firestoreDb, path), where('userId', '==', user.uid));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => doc.data() as Attachment);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    return [];
+  }
+}
+
+export async function getAttachmentData(attachment: Attachment): Promise<string> {
+  if (!attachment.hasChunks) return attachment.data || '';
+  
+  const user = auth.currentUser;
+  if (!user) return '';
+  
+  try {
+    const chunksQ = query(collection(firestoreDb, 'attachment_chunks'), where('attachmentId', '==', attachment.id), where('userId', '==', user.uid));
+    const chunksSnapshot = await getDocs(chunksQ);
+    const chunks = chunksSnapshot.docs.map(doc => doc.data() as AttachmentChunk);
+    chunks.sort((a, b) => a.chunkIndex - b.chunkIndex);
+    return chunks.map(c => c.data).join('');
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, `attachment_chunks/${attachment.id}`);
+    return '';
+  }
+}
+
 const CHUNK_SIZE = 800000; // Safe limit for base64 in 1MB document
 
 export async function saveAttachment(attachment: Attachment): Promise<void> {
+  if (isDemoMode()) {
+    const atts = getDemoData<Attachment[]>('attachments') || [];
+    const index = atts.findIndex(a => a.id === attachment.id);
+    if (index >= 0) atts[index] = attachment;
+    else atts.push(attachment);
+    saveDemoData('attachments', atts);
+    return;
+  }
   const user = auth.currentUser;
   if (!user) throw new Error("Must be logged in");
   
@@ -368,6 +479,11 @@ export async function saveAttachment(attachment: Attachment): Promise<void> {
 }
 
 export async function deleteAttachment(id: string): Promise<void> {
+  if (isDemoMode()) {
+    const atts = getDemoData<Attachment[]>('attachments') || [];
+    saveDemoData('attachments', atts.filter(a => a.id !== id));
+    return;
+  }
   const user = auth.currentUser;
   if (!user) throw new Error("Must be logged in");
   
@@ -394,4 +510,30 @@ export async function deleteAttachment(id: string): Promise<void> {
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
+}
+
+// --- DEMO MODE HELPERS ---
+
+export function isDemoMode(): boolean {
+  return typeof localStorage !== 'undefined' && localStorage.getItem('trackntrail_demo_mode') === 'true';
+}
+
+export function setDemoMode(active: boolean): void {
+  if (typeof localStorage === 'undefined') return;
+  if (active) {
+    localStorage.setItem('trackntrail_demo_mode', 'true');
+  } else {
+    localStorage.removeItem('trackntrail_demo_mode');
+  }
+}
+
+function saveDemoData(key: string, data: any): void {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(`trackntrail_demo_${key}`, JSON.stringify(data));
+}
+
+function getDemoData<T>(key: string): T | null {
+  if (typeof localStorage === 'undefined') return null;
+  const data = localStorage.getItem(`trackntrail_demo_${key}`);
+  return data ? JSON.parse(data) : null;
 }

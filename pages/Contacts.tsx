@@ -5,10 +5,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Trash2, Mail, Phone, Building2, Users, ExternalLink, Pencil } from 'lucide-react';
+import { Plus, Trash2, Mail, Phone, Building2, Users, ExternalLink, Pencil, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth } from '@/lib/firebase';
 import { Loading } from '@/components/ui/loading';
+import { formatAppDate, isFirestoreQuotaError } from '@/lib/utils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +27,7 @@ export default function Contacts() {
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [quotaExceeded, setQuotaExceeded] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<string | null>(null);
 
   // Form state
@@ -43,8 +45,12 @@ export default function Contacts() {
       const data = await getContacts();
       data.sort((a, b) => new Date(b.dateContacted).getTime() - new Date(a.dateContacted).getTime());
       setContacts(data);
+      setQuotaExceeded(false);
     } catch (err) {
       console.error('Failed to load contacts:', err);
+      if (isFirestoreQuotaError(err)) {
+        setQuotaExceeded(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -136,6 +142,22 @@ export default function Contacts() {
           transition={{ duration: 0.3, ease: "easeOut" }}
           className="space-y-8"
         >
+          {quotaExceeded && (
+            <div className="bg-red-50 border border-red-200 rounded-3xl p-6 flex flex-col md:flex-row items-center gap-6 shadow-sm">
+              <div className="bg-red-100 p-4 rounded-2xl">
+                <AlertCircle className="w-8 h-8 text-red-600" />
+              </div>
+              <div className="flex-1 text-center md:text-left">
+                <h2 className="text-xl font-bold text-red-900 font-serif">Firestore Quota Exceeded</h2>
+                <p className="text-red-700 mt-2 leading-relaxed">
+                  You've reached the free tier limit for database reads. 
+                  Your contacts cannot be loaded right now. 
+                  Please try again later or tomorrow.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-[#2d2a26] font-serif">Inbound Contacts</h1>
@@ -267,7 +289,7 @@ export default function Contacts() {
               
               <div className="mt-5 pt-5 border-t border-[#e8e4dc]">
                 <div className="text-xs font-bold uppercase tracking-wider text-[#d97757] mb-2">
-                  Contacted on {new Date(contact.dateContacted).toLocaleDateString()}
+                  Contacted on {formatAppDate(contact.dateContacted)}
                 </div>
                 {contact.notes && (
                   <p className="text-sm text-[#6b665e] leading-relaxed line-clamp-3">{contact.notes}</p>
